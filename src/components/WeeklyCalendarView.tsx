@@ -2,6 +2,7 @@ import { AlertTriangle, Ban, Coffee, Plus, Sparkles, Users, User } from 'lucide-
 import { useMemo, useState } from 'react';
 import { COLOR_THEMES } from '../data/presets';
 import {
+  assignOverlapColumns,
   DAY_LABELS,
   DAYS_ORDER,
   formatRange,
@@ -313,6 +314,7 @@ export function WeeklyCalendarView({
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex items-center gap-2">
                             <span
+                              dir="ltr"
                               className={`rounded-lg px-2 py-1 text-xs font-bold tabular-nums ${theme.badge}`}
                             >
                               {formatRange(session.startMin, session.endMin)}
@@ -391,7 +393,10 @@ export function WeeklyCalendarView({
                     <span className="text-sm font-bold text-slate-900">
                       {DAY_LABELS[day].full}
                     </span>
-                    <span className="text-[11px] font-medium text-slate-400 tabular-nums">
+                    <span
+                      dir="ltr"
+                      className="text-[11px] font-medium text-slate-400 tabular-nums"
+                    >
                       {kg ? formatRange(kg.startMin, kg.endMin) : 'סגור'}
                     </span>
                   </div>
@@ -464,13 +469,23 @@ export function WeeklyCalendarView({
                   >
                     {hourMarks.map((m) => {
                       const top = (m - seg.startMin) * PX_PER_MIN;
+                      const halfTop = (m + 30 - seg.startMin) * PX_PER_MIN;
                       return (
-                        <div
-                          key={m}
-                          className="absolute inset-x-0 flex -translate-y-1/2 items-center justify-center text-[11px] font-semibold text-slate-500 tabular-nums"
-                          style={{ top: `${Math.max(10, top)}px` }}
-                        >
-                          {formatTime(m)}
+                        <div key={m}>
+                          <div
+                            className="absolute inset-x-0 flex -translate-y-1/2 items-center justify-center text-[11px] font-semibold text-slate-500 tabular-nums"
+                            style={{ top: `${Math.max(10, top)}px` }}
+                          >
+                            {formatTime(m)}
+                          </div>
+                          {m + 30 < seg.endMin && (
+                            <div
+                              className="absolute inset-x-0 flex -translate-y-1/2 items-center justify-center text-[9px] font-medium text-slate-300 tabular-nums"
+                              style={{ top: `${halfTop}px` }}
+                            >
+                              {formatTime(m + 30)}
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -494,17 +509,27 @@ export function WeeklyCalendarView({
                               : '1fr',
                         }}
                       >
-                        {/* Horizontal hourly guidelines */}
-                        {hourMarks.map((m) => {
-                          const top = (m - seg.startMin) * PX_PER_MIN;
-                          return (
-                            <div
-                              key={m}
-                              className="pointer-events-none absolute inset-x-0 border-t border-slate-100"
-                              style={{ top: `${top}px` }}
-                            />
-                          );
-                        })}
+                        {/* Horizontal hourly & half-hour guidelines */}
+                        <div className="pointer-events-none absolute inset-0">
+                          {hourMarks.map((m) => {
+                            const top = (m - seg.startMin) * PX_PER_MIN;
+                            const halfTop = (m + 30 - seg.startMin) * PX_PER_MIN;
+                            return (
+                              <div key={m}>
+                                <div
+                                  className="absolute inset-x-0 border-t border-slate-100"
+                                  style={{ top: `${top}px` }}
+                                />
+                                {m + 30 < seg.endMin && (
+                                  <div
+                                    className="absolute inset-x-0 border-t border-dashed border-slate-100/80"
+                                    style={{ top: `${halfTop}px` }}
+                                  />
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
 
                         {activeDayProfs.length === 0 ? (
                           <div className="bg-slate-50/60" />
@@ -549,10 +574,33 @@ export function WeeklyCalendarView({
                               }
                             }
 
+                            const positionedSessions = assignOverlapColumns(laneSessions);
+
                             return (
                               <div
                                 key={prof.id}
-                                className="relative border-e border-slate-100 last:border-e-0"
+                                onClick={(e) => {
+                                  const rect =
+                                    e.currentTarget.getBoundingClientRect();
+                                  const offsetY = e.clientY - rect.top;
+                                  const rawMin =
+                                    seg.startMin +
+                                    Math.floor(offsetY / PX_PER_MIN / 15) * 15;
+                                  const duration =
+                                    state.rules.sessionDurationMin;
+                                  const maxStart = seg.endMin - duration;
+                                  const snappedStart = Math.max(
+                                    seg.startMin,
+                                    Math.min(maxStart, rawMin),
+                                  );
+                                  onCreateAtSlot({
+                                    professionalId: prof.id,
+                                    day,
+                                    startMin: snappedStart,
+                                  });
+                                }}
+                                title={`לחצו להוספת שיבוץ אצל ${prof.name} (בקפיצות של רבע שעה)`}
+                                className="relative cursor-pointer border-e border-slate-100 last:border-e-0"
                               >
                                 {/* Shade unavailable regions inside this therapist's lane */}
                                 {(() => {
@@ -610,7 +658,10 @@ export function WeeklyCalendarView({
                                       <button
                                         key={b.id}
                                         type="button"
-                                        onClick={() => onUnblockSlot(prof.id, b.id)}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          onUnblockSlot(prof.id, b.id);
+                                        }}
                                         title="לחצי להסרת חסימה זו"
                                         className="group absolute inset-x-1 z-10 flex flex-col items-center justify-center rounded-lg border border-dashed border-rose-300 bg-rose-50/75 px-1 text-center text-[10px] font-semibold text-rose-700 transition hover:bg-rose-100"
                                         style={{
@@ -638,13 +689,14 @@ export function WeeklyCalendarView({
                                     <button
                                       key={m}
                                       type="button"
-                                      onClick={() =>
+                                      onClick={(e) => {
+                                        e.stopPropagation();
                                         onCreateAtSlot({
                                           professionalId: prof.id,
                                           day,
                                           startMin: m,
-                                        })
-                                      }
+                                        });
+                                      }}
                                       className="group no-print absolute inset-x-1 flex items-center justify-center rounded-lg border border-transparent text-slate-300 transition hover:border-dashed hover:border-teal-300 hover:bg-teal-50/50 hover:text-teal-700"
                                       style={{
                                         top: `${top + 2}px`,
@@ -657,8 +709,8 @@ export function WeeklyCalendarView({
                                   );
                                 })}
 
-                                {/* Session Cards */}
-                                {laneSessions.map((session) => {
+                                {/* Session Cards (side-by-side when overlapping/duplicate) */}
+                                {positionedSessions.map(({ item: session, colIndex, colCount }) => {
                                   const ev = evaluations[session.id];
                                   const top =
                                     (Math.max(session.startMin, seg.startMin) -
@@ -671,13 +723,21 @@ export function WeeklyCalendarView({
 
                                   const isYellow = ev?.status === 'yellow';
                                   const isRed = ev?.status === 'red';
+                                  const yellowLabel = ev?.isDuplicate
+                                    ? 'כפילות'
+                                    : ev?.isConsecutivePair
+                                      ? 'רצף'
+                                      : 'אזהרה';
 
                                   return (
                                     <div key={session.id}>
                                       <button
                                         type="button"
-                                        onClick={() => onSelectSession(session)}
-                                        className={`group absolute inset-x-1 z-20 flex flex-col justify-between overflow-hidden rounded-xl border p-1.5 text-start shadow-2xs transition hover:z-30 hover:-translate-y-0.5 hover:shadow-md ${
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          onSelectSession(session);
+                                        }}
+                                        className={`group absolute z-20 flex flex-col justify-between overflow-hidden rounded-xl border p-1.5 text-start shadow-2xs transition hover:z-30 hover:-translate-y-0.5 hover:shadow-md ${
                                           isRed
                                             ? 'border-rose-400 bg-rose-50 text-rose-950 ring-2 ring-rose-300/70'
                                             : isYellow
@@ -687,10 +747,15 @@ export function WeeklyCalendarView({
                                         style={{
                                           top: `${top + 1}px`,
                                           height: `${Math.max(36, height - 2)}px`,
+                                          width: `calc(${100 / colCount}% - 4px)`,
+                                          insetInlineStart: `calc(${(colIndex * 100) / colCount}% + 2px)`,
                                         }}
                                       >
                                         <div className="flex items-center justify-between gap-1">
-                                          <span className="text-[10px] font-bold opacity-80 tabular-nums">
+                                          <span
+                                            dir="ltr"
+                                            className="text-[10px] font-bold opacity-80 tabular-nums"
+                                          >
                                             {formatRange(
                                               session.startMin,
                                               session.endMin,
@@ -702,7 +767,7 @@ export function WeeklyCalendarView({
                                               title={ev?.warnings.join(' | ')}
                                             >
                                               <AlertTriangle className="h-2.5 w-2.5" />
-                                              רצף
+                                              {yellowLabel}
                                             </span>
                                           )}
                                           {isRed && (

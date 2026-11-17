@@ -13,7 +13,11 @@ import {
   findCandidateSlots,
   findSwapSuggestions,
 } from '../validator';
-import { formatVisibleDaysRange, getVisibleDaysOrder } from '../timeUtils';
+import {
+  assignOverlapColumns,
+  formatVisibleDaysRange,
+  getVisibleDaysOrder,
+} from '../timeUtils';
 import { generateSchedule } from '../scheduler';
 
 function makeMinimalState(): ScheduleState {
@@ -311,5 +315,99 @@ describe('Schedule validation and auto-scheduler', () => {
 
     expect(formatVisibleDaysRange(getVisibleDaysOrder(5))).toBe('א׳–ה׳');
     expect(formatVisibleDaysRange(getVisibleDaysOrder(1))).toBe('א׳');
+  });
+
+  it('supports 45-min sessions starting at any quarter hour (XX:00, XX:15, XX:30, XX:45)', () => {
+    const state = makeMinimalState();
+    for (const startMin of [480, 495, 510, 525]) {
+      const ev = evaluateSessionPlacement(state, {
+        professionalId: 'prof_inbar',
+        type: 'one_on_one',
+        kidIds: ['kid_1'],
+        day: 'mon',
+        startMin,
+        endMin: startMin + 45,
+      });
+      expect(ev.status).toBe('green');
+    }
+
+    const candidates = findCandidateSlots(state, {
+      professionalId: 'prof_inbar',
+      type: 'one_on_one',
+      kidIds: ['kid_1'],
+    }, { onlyDay: 'mon' });
+    const starts = new Set(candidates.map((c) => c.startMin));
+    expect(starts.has(480)).toBe(true); // 08:00
+    expect(starts.has(495)).toBe(true); // 08:15
+    expect(starts.has(510)).toBe(true); // 08:30
+    expect(starts.has(525)).toBe(true); // 08:45
+
+    // Disabling quarter-hour starts blocks 08:15
+    const strictState: ScheduleState = {
+      ...state,
+      rules: { ...state.rules, allowQuarterHourStarts: false },
+    };
+    const strictEval = evaluateSessionPlacement(strictState, {
+      professionalId: 'prof_inbar',
+      type: 'one_on_one',
+      kidIds: ['kid_1'],
+      day: 'mon',
+      startMin: 495,
+      endMin: 540,
+    });
+    expect(strictEval.status).toBe('red');
+  });
+
+  it('allows duplicates/overlaps as yellow warnings when allowDuplicateBookings is enabled and lays them out side-by-side', () => {
+    const state = makeMinimalState();
+    state.sessions.push({
+      id: 's1',
+      professionalId: 'prof_inbar',
+      type: 'one_on_one',
+      kidIds: ['kid_1'],
+      day: 'mon',
+      startMin: 480, // 08:00-08:45
+      endMin: 525,
+    });
+
+    // Without allowDuplicateBookings, overlapping 08:15-09:00 is red
+    const redOverlap = evaluateSessionPlacement(state, {
+      professionalId: 'prof_inbar',
+      type: 'one_on_one',
+      kidIds: ['kid_2'],
+      day: 'mon',
+      startMin: 495, // 08:15-09:00
+      endMin: 540,
+    });
+    expect(redOverlap.status).toBe('red');
+
+    // With allowDuplicateBookings = true, overlapping therapist slot + same-day 1:1 are yellow duplicates
+    const dupState: ScheduleState = {
+      ...state,
+      rules: { ...state.rules, allowDuplicateBookings: true },
+    };
+    const yellowOverlap = evaluateSessionPlacement(dupState, {
+      professionalId: 'prof_inbar',
+      type: 'one_on_one',
+      kidIds: ['kid_1'],
+      day: 'mon',
+      startMin: 495,
+      endMin: 540,
+    });
+    expect(yellowOverlap.status).toBe('yellow');
+    expect(yellowOverlap.isDuplicate).toBe(true);
+
+    // Side-by-side column assignment for overlapping sessions
+    const layout = assignOverlapColumns([
+      { id: 'a', startMin: 480, endMin: 525 },
+      { id: 'b', startMin: 495, endMin: 540 },
+      { id: 'c', startMin: 600, endMin: 645 },
+    ]);
+    expect(layout.find((x) => x.item.id === 'a')?.colCount).toBe(2);
+    expect(layout.find((x) => x.item.id === 'b')?.colCount).toBe(2);
+    expect(layout.find((x) => x.item.id === 'a')?.colIndex).not.toBe(
+      layout.find((x) => x.item.id === 'b')?.colIndex,
+    );
+    expect(layout.find((x) => x.item.id === 'c')?.colCount).toBe(1);
   });
 });

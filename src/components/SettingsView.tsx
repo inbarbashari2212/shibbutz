@@ -489,6 +489,44 @@ export function SettingsView({
         </div>
 
         <div className="mt-4 grid gap-2.5 sm:grid-cols-2">
+          <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-teal-200 bg-teal-50/40 p-3 text-xs font-semibold text-slate-800">
+            <input
+              type="checkbox"
+              checked={state.rules.allowQuarterHourStarts ?? true}
+              onChange={(e) =>
+                updateRules({ allowQuarterHourStarts: e.target.checked })
+              }
+              className="mt-0.5 h-4 w-4 accent-teal-600"
+            />
+            <div>
+              <div className="font-bold text-slate-900">
+                אפשר התחלת טיפולים בכל רבע שעה (XX:00, XX:15, XX:30, XX:45)
+              </div>
+              <div className="mt-0.5 text-[11px] font-normal text-slate-600">
+                כל טיפול נשאר באורך המוגדר ({state.rules.sessionDurationMin} דק׳)
+                ויכול להתחיל בכל רבע שעה.
+              </div>
+            </div>
+          </label>
+          <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50/40 p-3 text-xs font-semibold text-slate-800">
+            <input
+              type="checkbox"
+              checked={Boolean(state.rules.allowDuplicateBookings)}
+              onChange={(e) =>
+                updateRules({ allowDuplicateBookings: e.target.checked })
+              }
+              className="mt-0.5 h-4 w-4 accent-amber-600"
+            />
+            <div>
+              <div className="font-bold text-slate-900">
+                אפשר שיבוץ כפילויות וחפיפות
+              </div>
+              <div className="mt-0.5 text-[11px] font-normal text-slate-600">
+                מאפשר לשבץ שיבוצים חופפים באותה שעה או שני טיפולי 1:1 באותו יום
+                (יופיעו כאזהרה צהובה).
+              </div>
+            </div>
+          </label>
           <label className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-xs font-semibold text-slate-800">
             <input
               type="checkbox"

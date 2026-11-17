@@ -202,7 +202,10 @@ export function TherapistsView({
                             }`}
                           >
                             <div className="flex items-center justify-between gap-1">
-                              <span className="text-xs font-bold tabular-nums text-slate-800">
+                              <span
+                                dir="ltr"
+                                className="text-xs font-bold tabular-nums text-slate-800"
+                              >
                                 {formatRange(s.startMin, s.endMin)}
                               </span>
                               {ev && <StatusBadge status={ev.status} compact />}
@@ -262,7 +265,7 @@ export function TherapistsView({
                         <div className="flex items-center gap-1.5">
                           <Ban className="h-3.5 w-3.5 shrink-0" />
                           <div>
-                            <div className="font-bold tabular-nums">
+                            <div dir="ltr" className="inline-block font-bold tabular-nums">
                               {formatRange(b.startMin, b.endMin)}
                             </div>
                             <div className="text-[11px] opacity-80">

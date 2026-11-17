@@ -41,6 +41,7 @@ export function evaluateSessionPlacement(
   const reasons: string[] = [];
   const warnings: string[] = [];
   let isConsecutivePair = false;
+  let isDuplicate = false;
   const consecutivePartnerIds: string[] = [];
   let requiredRecoveryBreak: TimeWindow | undefined;
   const kidTightTransitions: {
@@ -50,6 +51,9 @@ export function evaluateSessionPlacement(
   }[] = [];
 
   const { rules } = state;
+  const allowDuplicates = Boolean(rules.allowDuplicateBookings);
+  const allowQuarterHours = rules.allowQuarterHourStarts ?? true;
+
   const prof = state.professionals.find((p) => p.id === candidate.professionalId);
   if (!prof) {
     return {
@@ -57,6 +61,7 @@ export function evaluateSessionPlacement(
       reasons: ['המטפלת לא נמצאה במערכת'],
       warnings: [],
       isConsecutivePair: false,
+      isDuplicate: false,
       consecutivePartnerIds: [],
       kidTightTransitions: [],
     };
@@ -104,7 +109,14 @@ export function evaluateSessionPlacement(
       rangesOverlap(candidate.startMin, candidate.endMin, s.startMin, s.endMin),
   );
   if (profOverlap) {
-    reasons.push(`ל${prof.name} כבר יש שיבוץ חופף בשעה זו`);
+    isDuplicate = true;
+    if (allowDuplicates) {
+      warnings.push(
+        `כפילות אצל ${prof.name}: שיבוץ חופף בשעה זו (${formatTime(profOverlap.startMin)}–${formatTime(profOverlap.endMin)})`,
+      );
+    } else {
+      reasons.push(`ל${prof.name} כבר יש שיבוץ חופף בשעה זו`);
+    }
   }
 
   // Check kid overlap + tight transitions across therapists
@@ -139,7 +151,14 @@ export function evaluateSessionPlacement(
   }
 
   if (overlappingKids.size > 0) {
-    reasons.push(`התנגשות בשעות עבור: ${Array.from(overlappingKids).join(', ')}`);
+    isDuplicate = true;
+    if (allowDuplicates) {
+      warnings.push(
+        `כפילות בשעות עבור: ${Array.from(overlappingKids).join(', ')}`,
+      );
+    } else {
+      reasons.push(`התנגשות בשעות עבור: ${Array.from(overlappingKids).join(', ')}`);
+    }
   }
 
   if (kidTightTransitions.length > 0 && rules.warnKidBackToBackDifferentProf) {
@@ -159,10 +178,17 @@ export function evaluateSessionPlacement(
         s.kidIds.includes(kidId),
     );
     if (sameDaySameProf) {
+      isDuplicate = true;
       const kidName = kidMap.get(kidId)?.name ?? kidId;
-      reasons.push(
-        `ל${kidName} כבר יש טיפול 1:1 עם ${prof.name} ביום זה (${formatTime(sameDaySameProf.startMin)})`,
-      );
+      if (allowDuplicates) {
+        warnings.push(
+          `כפילות באותו יום: ל${kidName} כבר יש טיפול 1:1 נוסף עם ${prof.name} (${formatTime(sameDaySameProf.startMin)})`,
+        );
+      } else {
+        reasons.push(
+          `ל${kidName} כבר יש טיפול 1:1 עם ${prof.name} ביום זה (${formatTime(sameDaySameProf.startMin)})`,
+        );
+      }
     }
   }
 
@@ -289,6 +315,10 @@ export function evaluateSessionPlacement(
     }
   }
 
+  if (!allowQuarterHours && candidate.startMin % 60 !== 0 && !isConsecutivePair) {
+    reasons.push('יש לשבץ התחלה בשעה עגולה (XX:00) לפי ההגדרות');
+  }
+
   let status: SlotStatus = 'green';
   if (reasons.length > 0) {
     status = 'red';
@@ -301,6 +331,7 @@ export function evaluateSessionPlacement(
     reasons,
     warnings,
     isConsecutivePair,
+    isDuplicate,
     consecutivePartnerIds,
     requiredRecoveryBreak,
     kidTightTransitions,

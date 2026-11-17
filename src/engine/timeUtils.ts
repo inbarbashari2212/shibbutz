@@ -86,3 +86,65 @@ export function intersectWindows(a: TimeWindow[], b: TimeWindow[]): TimeWindow[]
 export function createId(prefix = 'id'): string {
   return `${prefix}_${Math.random().toString(36).slice(2, 9)}`;
 }
+
+export interface PositionedSession<T extends { startMin: number; endMin: number }> {
+  item: T;
+  colIndex: number;
+  colCount: number;
+}
+
+export function assignOverlapColumns<T extends { startMin: number; endMin: number }>(
+  items: T[],
+): PositionedSession<T>[] {
+  if (items.length === 0) return [];
+  const sorted = [...items].sort((a, b) =>
+    a.startMin !== b.startMin ? a.startMin - b.startMin : a.endMin - b.endMin,
+  );
+
+  // Split into connected overlap clusters
+  const clusters: T[][] = [];
+  let currentCluster: T[] = [];
+  let clusterEnd = -Infinity;
+
+  for (const item of sorted) {
+    if (currentCluster.length === 0 || item.startMin < clusterEnd) {
+      currentCluster.push(item);
+      clusterEnd = Math.max(clusterEnd, item.endMin);
+    } else {
+      clusters.push(currentCluster);
+      currentCluster = [item];
+      clusterEnd = item.endMin;
+    }
+  }
+  if (currentCluster.length > 0) {
+    clusters.push(currentCluster);
+  }
+
+  const result: PositionedSession<T>[] = [];
+  for (const cluster of clusters) {
+    const colEnds: number[] = [];
+    const placed: { item: T; colIndex: number }[] = [];
+
+    for (const item of cluster) {
+      let colIndex = colEnds.findIndex((endMin) => endMin <= item.startMin);
+      if (colIndex === -1) {
+        colIndex = colEnds.length;
+        colEnds.push(item.endMin);
+      } else {
+        colEnds[colIndex] = item.endMin;
+      }
+      placed.push({ item, colIndex });
+    }
+
+    const colCount = Math.max(1, colEnds.length);
+    for (const p of placed) {
+      result.push({
+        item: p.item,
+        colIndex: p.colIndex,
+        colCount,
+      });
+    }
+  }
+
+  return result;
+}

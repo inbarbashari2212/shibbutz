@@ -57,6 +57,8 @@ export interface Session {
 
 export interface ScheduleRules {
   displayDaysCount?: number;
+  allowQuarterHourStarts?: boolean;
+  allowDuplicateBookings?: boolean;
   kindergartenHours: Record<DayKey, TimeWindow | null>;
   sessionWindows: Record<DayKey, TimeWindow[]>;
   sessionDurationMin: number;
@@ -76,6 +78,7 @@ export interface SlotEvaluation {
   reasons: string[];
   warnings: string[];
   isConsecutivePair: boolean;
+  isDuplicate?: boolean;
   consecutivePartnerIds: string[];
   requiredRecoveryBreak?: TimeWindow;
   kidTightTransitions: { kidId: string; otherSessionId: string; otherProfId: string }[];

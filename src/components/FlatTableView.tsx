@@ -156,7 +156,10 @@ export function FlatTableView({
                       <div className="font-bold text-slate-900">
                         {DAY_LABELS[session.day].full}
                       </div>
-                      <div className="text-xs font-medium text-slate-500 tabular-nums">
+                      <div
+                        dir="ltr"
+                        className="inline-block text-xs font-medium text-slate-500 tabular-nums"
+                      >
                         {formatRange(session.startMin, session.endMin)}
                       </div>
                     </td>
@@ -202,7 +205,16 @@ export function FlatTableView({
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      {ev && <StatusBadge status={ev.status} />}
+                      {ev && (
+                        <StatusBadge
+                          status={ev.status}
+                          labelOverride={
+                            ev.status === 'yellow' && ev.isDuplicate
+                              ? 'כפילות (אזהרה)'
+                              : undefined
+                          }
+                        />
+                      )}
                       {ev?.reasons.map((r, i) => (
                         <div key={i} className="mt-1 text-xs text-rose-700">
                           {r}

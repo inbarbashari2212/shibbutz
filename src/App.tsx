@@ -217,14 +217,23 @@ export function App() {
     });
   }, [state.sessions, filters, evaluations, profMap, kidMap]);
 
-  const handleSaveSession = (saved: Session, isNew: boolean) => {
+  const handleSaveSession = (
+    saved: Session,
+    isNew: boolean,
+    enableDuplicatesRule?: boolean,
+  ) => {
     const nextSessions = isNew
       ? [...state.sessions, saved]
       : state.sessions.map((s) => (s.id === saved.id ? saved : s));
+    const nextRules =
+      enableDuplicatesRule && !state.rules.allowDuplicateBookings
+        ? { ...state.rules, allowDuplicateBookings: true }
+        : state.rules;
     commitState(
       {
         ...state,
         sessions: nextSessions,
+        rules: nextRules,
         lastModifiedIso: new Date().toISOString(),
       },
       isNew
@@ -232,6 +241,22 @@ export function App() {
         : `השיבוץ עודכן ל${DAY_LABELS[saved.day].full} ${formatRange(saved.startMin, saved.endMin)}`,
     );
     setEditorDraft(null);
+  };
+
+  const handleDuplicateSession = (source: Session) => {
+    setEditorDraft({
+      mode: 'create',
+      prefill: {
+        professionalId: source.professionalId,
+        type: source.type,
+        kidIds: [...source.kidIds],
+        groupLabel: source.groupLabel,
+        notes: source.notes,
+        day: source.day,
+        startMin: source.startMin,
+        enableDuplicates: true,
+      },
+    });
   };
 
   const handleSwapSessions = (sessionAId: string, sessionBId: string) => {
@@ -678,10 +703,12 @@ export function App() {
       {/* Modals */}
       {editorDraft && (
         <SessionEditorModal
+          key={`${editorDraft.mode}_${editorDraft.session?.id ?? 'new'}_${editorDraft.prefill?.day ?? ''}_${editorDraft.prefill?.startMin ?? ''}_${editorDraft.prefill?.enableDuplicates ? 'dup' : 'std'}`}
           state={state}
           draft={editorDraft}
           onClose={() => setEditorDraft(null)}
           onSaveSession={handleSaveSession}
+          onDuplicateSession={handleDuplicateSession}
           onSwapSessions={handleSwapSessions}
           onDeleteSession={handleDeleteSession}
           onBlockOriginalAndStayOpen={(

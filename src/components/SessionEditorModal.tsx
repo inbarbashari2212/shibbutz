@@ -6,6 +6,7 @@ import {
   Check,
   CheckCircle2,
   Clock,
+  Copy,
   Eye,
   EyeOff,
   Sparkles,
@@ -39,8 +40,11 @@ export interface SessionEditorDraft {
     professionalId?: string;
     type?: SessionType;
     kidIds?: string[];
+    groupLabel?: string;
+    notes?: string;
     day?: DayKey;
     startMin?: number;
+    enableDuplicates?: boolean;
   };
 }
 
@@ -48,7 +52,12 @@ interface SessionEditorModalProps {
   state: ScheduleState;
   draft: SessionEditorDraft;
   onClose: () => void;
-  onSaveSession: (session: Session, isNew: boolean) => void;
+  onSaveSession: (
+    session: Session,
+    isNew: boolean,
+    enableDuplicatesRule?: boolean,
+  ) => void;
+  onDuplicateSession: (session: Session) => void;
   onSwapSessions: (sessionAId: string, sessionBId: string) => void;
   onDeleteSession: (sessionId: string) => void;
   onBlockOriginalAndStayOpen: (
@@ -64,6 +73,7 @@ export function SessionEditorModal({
   draft,
   onClose,
   onSaveSession,
+  onDuplicateSession,
   onSwapSessions,
   onDeleteSession,
   onBlockOriginalAndStayOpen,
@@ -86,9 +96,13 @@ export function SessionEditorModal({
       (state.kids[0] ? [state.kids[0].id] : []),
   );
   const [groupLabel, setGroupLabel] = useState<string>(
-    existing?.groupLabel ?? `קבוצתי (כל ה-${state.kids.length})`,
+    existing?.groupLabel ??
+      draft.prefill?.groupLabel ??
+      `קבוצתי (כל ה-${state.kids.length})`,
   );
-  const [notes, setNotes] = useState<string>(existing?.notes ?? '');
+  const [notes, setNotes] = useState<string>(
+    existing?.notes ?? draft.prefill?.notes ?? '',
+  );
 
   const [selectedDay, setSelectedDay] = useState<DayKey>(
     existing?.day ?? draft.prefill?.day ?? 'sun',
@@ -97,10 +111,16 @@ export function SessionEditorModal({
     existing?.startMin ?? draft.prefill?.startMin ?? 480,
   );
 
+  const [allowDuplicates, setAllowDuplicates] = useState<boolean>(
+    Boolean(
+      draft.prefill?.enableDuplicates || state.rules.allowDuplicateBookings,
+    ),
+  );
   const [activeTab, setActiveTab] = useState<'slots' | 'swaps'>('slots');
   const [slotFilter, setSlotFilter] = useState<'available' | 'green_only'>(
     'available',
   );
+  const [quarterFilter, setQuarterFilter] = useState<'all' | 'hourly'>('all');
   const [dayFilter, setDayFilter] = useState<'all' | DayKey>('all');
   const [showRedSlots, setShowRedSlots] = useState(false);
 
@@ -131,12 +151,27 @@ export function SessionEditorModal({
     );
   };
 
+  // Effective state with local duplicate-booking toggle applied
+  const effectiveState = useMemo<ScheduleState>(
+    () =>
+      allowDuplicates === Boolean(state.rules.allowDuplicateBookings)
+        ? state
+        : {
+            ...state,
+            rules: {
+              ...state.rules,
+              allowDuplicateBookings: allowDuplicates,
+            },
+          },
+    [state, allowDuplicates],
+  );
+
   // Live evaluation of currently selected slot
   const selectedEndMin = selectedStartMin + duration;
   const currentEvaluation = useMemo(
     () =>
       evaluateSessionPlacement(
-        state,
+        effectiveState,
         {
           id: existing?.id,
           professionalId,
@@ -151,7 +186,7 @@ export function SessionEditorModal({
         existing ? [existing.id] : [],
       ),
     [
-      state,
+      effectiveState,
       existing,
       professionalId,
       type,
@@ -168,7 +203,7 @@ export function SessionEditorModal({
   const candidateSlots = useMemo(() => {
     if (kidIds.length === 0) return [];
     const all = findCandidateSlots(
-      state,
+      effectiveState,
       {
         professionalId,
         type,
@@ -182,14 +217,21 @@ export function SessionEditorModal({
         onlyDay: dayFilter === 'all' ? undefined : dayFilter,
       },
     );
-    if (slotFilter === 'green_only') {
-      return all.filter(
-        (c) => c.evaluation.status === 'green' || (showRedSlots && c.evaluation.status === 'red'),
-      );
-    }
-    return all;
+    return all.filter((c) => {
+      if (
+        slotFilter === 'green_only' &&
+        c.evaluation.status !== 'green' &&
+        !(showRedSlots && c.evaluation.status === 'red')
+      ) {
+        return false;
+      }
+      if (quarterFilter === 'hourly' && !c.isStandardHour) {
+        return false;
+      }
+      return true;
+    });
   }, [
-    state,
+    effectiveState,
     professionalId,
     type,
     kidIds,
@@ -199,12 +241,13 @@ export function SessionEditorModal({
     showRedSlots,
     dayFilter,
     slotFilter,
+    quarterFilter,
   ]);
 
   const swapSuggestions = useMemo(() => {
     if (!existing) return [];
-    return findSwapSuggestions(state, existing, 8);
-  }, [state, existing]);
+    return findSwapSuggestions(effectiveState, existing, 8);
+  }, [effectiveState, existing]);
 
   const greenCount = candidateSlots.filter(
     (c) => c.evaluation.status === 'green',
@@ -222,6 +265,9 @@ export function SessionEditorModal({
         existing.startMin < b.endMin,
     );
 
+  const selectedHour = Math.floor(selectedStartMin / 60);
+  const selectedMinute = selectedStartMin % 60;
+
   const handleConfirmSave = () => {
     if (kidIds.length === 0 || !prof) return;
     const saved: Session = {
@@ -235,7 +281,7 @@ export function SessionEditorModal({
       endMin: selectedEndMin,
       notes: notes.trim() || undefined,
     };
-    onSaveSession(saved, !existing);
+    onSaveSession(saved, !existing, allowDuplicates);
   };
 
   const profTheme = prof ? COLOR_THEMES[prof.color] : COLOR_THEMES.teal;
@@ -443,6 +489,91 @@ export function SessionEditorModal({
             )}
           </div>
 
+          {/* Manual Day & Quarter-Hour Time Selector + Duplicate Toggle */}
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3 space-y-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-xs font-extrabold text-slate-800">
+                בחירה ידנית לפי רבעי שעה ({duration} דק׳ לכל טיפול)
+              </span>
+              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-amber-200 bg-white px-2.5 py-1 text-[11px] font-bold text-amber-900">
+                <input
+                  type="checkbox"
+                  checked={allowDuplicates}
+                  onChange={(e) => setAllowDuplicates(e.target.checked)}
+                  className="h-3.5 w-3.5 accent-amber-600"
+                />
+                <span>אפשר כפילויות וחפיפות</span>
+              </label>
+            </div>
+
+            <div className="grid gap-2 sm:grid-cols-3">
+              <div>
+                <label className="mb-1 block text-[11px] font-semibold text-slate-500">
+                  יום
+                </label>
+                <select
+                  value={selectedDay}
+                  onChange={(e) => setSelectedDay(e.target.value as DayKey)}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-800 focus:border-teal-500 focus:outline-none"
+                >
+                  {DAYS_ORDER.map((d) => (
+                    <option key={d} value={d}>
+                      {DAY_LABELS[d].full}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-[11px] font-semibold text-slate-500">
+                  שעת התחלה
+                </label>
+                <select
+                  value={selectedHour}
+                  onChange={(e) =>
+                    setSelectedStartMin(
+                      Number(e.target.value) * 60 + selectedMinute,
+                    )
+                  }
+                  className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-800 tabular-nums focus:border-teal-500 focus:outline-none"
+                >
+                  {[7, 8, 9, 10, 11, 12, 13, 14, 15].map((h) => (
+                    <option key={h} value={h}>
+                      {String(h).padStart(2, '0')}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-[11px] font-semibold text-slate-500">
+                  דקות (רבע שעה)
+                </label>
+                <div className="grid grid-cols-4 gap-1">
+                  {[0, 15, 30, 45].map((min) => {
+                    const active = selectedMinute === min;
+                    return (
+                      <button
+                        key={min}
+                        type="button"
+                        onClick={() =>
+                          setSelectedStartMin(selectedHour * 60 + min)
+                        }
+                        className={`rounded-lg border py-1.5 text-xs font-bold tabular-nums transition ${
+                          active
+                            ? 'border-teal-600 bg-teal-600 text-white shadow-2xs'
+                            : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-100'
+                        }`}
+                      >
+                        :{String(min).padStart(2, '0')}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Live Selected Slot Status Preview */}
           <div
             className={`rounded-2xl border p-3 transition ${
@@ -458,7 +589,7 @@ export function SessionEditorModal({
                 <Clock className="h-4 w-4 text-slate-600" />
                 <span>
                   משבצת נבחרת: {DAY_LABELS[selectedDay].full} •{' '}
-                  <span className="tabular-nums">
+                  <span dir="ltr" className="inline-block tabular-nums">
                     {formatRange(selectedStartMin, selectedEndMin)}
                   </span>
                 </span>
@@ -539,6 +670,21 @@ export function SessionEditorModal({
                     }`}
                   >
                     ירוק בלבד ({greenCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setQuarterFilter((q) => (q === 'all' ? 'hourly' : 'all'))
+                    }
+                    className={`rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition ${
+                      quarterFilter === 'hourly'
+                        ? 'border-teal-300 bg-teal-50 text-teal-800'
+                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    {quarterFilter === 'hourly'
+                      ? 'שעות עגולות (:00)'
+                      : 'כל רבעי השעה'}
                   </button>
                   <button
                     type="button"
@@ -638,7 +784,7 @@ export function SessionEditorModal({
                               )}
                               <span className="text-xs font-extrabold text-slate-900">
                                 {DAY_LABELS[slot.day].full} •{' '}
-                                <span className="tabular-nums">
+                                <span dir="ltr" className="inline-block tabular-nums">
                                   {formatRange(slot.startMin, slot.endMin)}
                                 </span>
                               </span>
@@ -650,7 +796,11 @@ export function SessionEditorModal({
                             )}
                             {st === 'yellow' && (
                               <span className="rounded bg-amber-200/80 px-1.5 py-0.5 text-[10px] font-bold text-amber-900">
-                                רצף כפול
+                                {slot.evaluation.isDuplicate
+                                  ? 'כפילות'
+                                  : slot.evaluation.isConsecutivePair
+                                    ? 'רצף כפול'
+                                    : 'אזהרה'}
                               </span>
                             )}
                           </div>
@@ -732,16 +882,26 @@ export function SessionEditorModal({
 
         {/* Sticky Footer */}
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:px-6">
-          <div>
+          <div className="flex flex-wrap items-center gap-2">
             {existing && (
-              <button
-                type="button"
-                onClick={() => onDeleteSession(existing.id)}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-white px-3 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-50"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                <span>מחק שיבוץ</span>
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => onDeleteSession(existing.id)}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-white px-3 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-50"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  <span>מחק שיבוץ</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onDuplicateSession(existing)}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900 transition hover:bg-amber-100"
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                  <span>שכפל שיבוץ (כפילות)</span>
+                </button>
+              </>
             )}
           </div>
           <div className="flex items-center gap-2">
@@ -770,7 +930,9 @@ export function SessionEditorModal({
                   ? currentEvaluation.status === 'red'
                     ? 'שמור בכל זאת (עם התנגשות)'
                     : 'שמור שינוי שעה'
-                  : 'שבץ טיפול חדש'}
+                  : currentEvaluation.isDuplicate
+                    ? 'שבץ ככפילות'
+                    : 'שבץ טיפול חדש'}
               </span>
             </button>
           </div>

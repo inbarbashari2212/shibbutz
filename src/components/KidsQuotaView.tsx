@@ -203,7 +203,7 @@ export function KidsQuotaView({
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5 font-bold text-slate-800">
                         <span>יום {DAY_LABELS[s.day].short}</span>
-                        <span className="tabular-nums text-slate-500">
+                        <span dir="ltr" className="tabular-nums text-slate-500">
                           {formatRange(s.startMin, s.endMin)}
                         </span>
                       </div>

@@ -85,6 +85,8 @@ export const COLOR_THEMES: Record<
 
 export const DEFAULT_RULES: ScheduleRules = {
   displayDaysCount: 6,
+  allowQuarterHourStarts: true,
+  allowDuplicateBookings: false,
   kindergartenHours: {
     sun: { startMin: 7 * 60 + 30, endMin: 15 * 60 + 30 },
     mon: { startMin: 7 * 60 + 30, endMin: 15 * 60 + 30 },
