@@ -13,6 +13,7 @@ import {
   findCandidateSlots,
   findSwapSuggestions,
 } from '../validator';
+import { formatVisibleDaysRange, getVisibleDaysOrder } from '../timeUtils';
 import { generateSchedule } from '../scheduler';
 
 function makeMinimalState(): ScheduleState {
@@ -292,5 +293,23 @@ describe('Schedule validation and auto-scheduler', () => {
     expect(res.state.sessions).toHaveLength(54);
     const evals = evaluateAllSessions(res.state);
     expect(Object.values(evals).filter((e) => e.status === 'red')).toHaveLength(0);
+  });
+
+  it('clamps and formats visible days count cleanly', () => {
+    expect(getVisibleDaysOrder(undefined)).toEqual([
+      'sun',
+      'mon',
+      'tue',
+      'wed',
+      'thu',
+      'fri',
+    ]);
+    expect(getVisibleDaysOrder(5)).toEqual(['sun', 'mon', 'tue', 'wed', 'thu']);
+    expect(getVisibleDaysOrder(3)).toEqual(['sun', 'mon', 'tue']);
+    expect(getVisibleDaysOrder(0)).toEqual(['sun']);
+    expect(getVisibleDaysOrder(12)).toHaveLength(6);
+
+    expect(formatVisibleDaysRange(getVisibleDaysOrder(5))).toBe('א׳–ה׳');
+    expect(formatVisibleDaysRange(getVisibleDaysOrder(1))).toBe('א׳');
   });
 });

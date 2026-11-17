@@ -56,6 +56,7 @@ export interface Session {
 }
 
 export interface ScheduleRules {
+  displayDaysCount?: number;
   kindergartenHours: Record<DayKey, TimeWindow | null>;
   sessionWindows: Record<DayKey, TimeWindow[]>;
   sessionDurationMin: number;

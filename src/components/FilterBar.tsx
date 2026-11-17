@@ -1,7 +1,11 @@
 import { Filter, RotateCcw, Search, X } from 'lucide-react';
 import { useState } from 'react';
 import { COLOR_THEMES } from '../data/presets';
-import { DAY_LABELS, DAYS_ORDER } from '../engine/timeUtils';
+import {
+  DAY_LABELS,
+  formatVisibleDaysRange,
+  getVisibleDaysOrder,
+} from '../engine/timeUtils';
 import { INITIAL_FILTERS, ScheduleFilters } from '../types/filters';
 import { Kid, Professional, SessionType, SlotStatus } from '../types/schedule';
 
@@ -10,6 +14,7 @@ interface FilterBarProps {
   onChange: (next: ScheduleFilters) => void;
   professionals: Professional[];
   kids: Kid[];
+  displayDaysCount?: number;
   totalCount: number;
   filteredCount: number;
 }
@@ -19,10 +24,12 @@ export function FilterBar({
   onChange,
   professionals,
   kids,
+  displayDaysCount,
   totalCount,
   filteredCount,
 }: FilterBarProps) {
   const [mobileExpanded, setMobileExpanded] = useState(false);
+  const visibleDays = getVisibleDaysOrder(displayDaysCount);
 
   const hasActiveFilters =
     filters.professionalIds.length > 0 ||
@@ -240,8 +247,10 @@ export function FilterBar({
               }
               className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700 focus:border-teal-500 focus:outline-none"
             >
-              <option value="all">כל השבוע (א׳–ו׳)</option>
-              {DAYS_ORDER.map((d) => (
+              <option value="all">
+                כל השבוע ({formatVisibleDaysRange(visibleDays)})
+              </option>
+              {visibleDays.map((d) => (
                 <option key={d} value={d}>
                   {DAY_LABELS[d].full}
                 </option>

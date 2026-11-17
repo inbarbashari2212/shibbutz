@@ -16,6 +16,7 @@ import {
   DAY_LABELS,
   DAYS_ORDER,
   formatRange,
+  getVisibleDaysOrder,
   parseTimeToMinutes,
 } from '../engine/timeUtils';
 import {
@@ -128,7 +129,7 @@ export function TherapistsView({
         {/* Work Days & Schedule Columns */}
         <div className="space-y-3 lg:col-span-2">
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {DAYS_ORDER.map((day) => {
+            {getVisibleDaysOrder(state.rules.displayDaysCount).map((day) => {
               const windows = activeProf.workSchedule[day] ?? [];
               const daySessions = profSessions
                 .filter((s) => s.day === day)

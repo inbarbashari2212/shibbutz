@@ -6,6 +6,8 @@ import {
   DAYS_ORDER,
   formatRange,
   formatTime,
+  formatVisibleDaysRange,
+  getVisibleDaysOrder,
   isContainedInWindows,
 } from '../engine/timeUtils';
 import { ScheduleFilters } from '../types/filters';
@@ -31,6 +33,7 @@ interface WeeklyCalendarViewProps {
     startMin: number;
   }) => void;
   onUnblockSlot: (professionalId: string, blockId: string) => void;
+  onShowAllDays?: () => void;
 }
 
 const PX_PER_MIN = 1.45; // 45 mins = 65.25px, 60 mins = 87px (super crisp & roomy)
@@ -43,13 +46,23 @@ export function WeeklyCalendarView({
   onSelectSession,
   onCreateAtSlot,
   onUnblockSlot,
+  onShowAllDays,
 }: WeeklyCalendarViewProps) {
+  const configuredDays = useMemo(
+    () => getVisibleDaysOrder(state.rules.displayDaysCount),
+    [state.rules.displayDaysCount],
+  );
+
   const [mobileDay, setMobileDay] = useState<DayKey>(() =>
-    filters.day !== 'all' ? filters.day : 'sun',
+    filters.day !== 'all' ? filters.day : configuredDays[0] ?? 'sun',
   );
 
   const activeMobileDay: DayKey =
-    filters.day !== 'all' ? filters.day : mobileDay;
+    filters.day !== 'all'
+      ? filters.day
+      : configuredDays.includes(mobileDay)
+        ? mobileDay
+        : configuredDays[0] ?? 'sun';
 
   const profMap = useMemo(
     () => new Map<string, Professional>(state.professionals.map((p) => [p.id, p])),
@@ -63,10 +76,18 @@ export function WeeklyCalendarView({
   const visibleDays = useMemo(
     () =>
       filters.day === 'all'
-        ? DAYS_ORDER
+        ? configuredDays
         : DAYS_ORDER.filter((d) => d === filters.day),
-    [filters.day],
+    [filters.day, configuredDays],
   );
+
+  const hiddenSessionsCount = useMemo(() => {
+    if (filters.day !== 'all' || configuredDays.length >= DAYS_ORDER.length) {
+      return 0;
+    }
+    const shownSet = new Set(configuredDays);
+    return filteredSessions.filter((s) => !shownSet.has(s.day)).length;
+  }, [filters.day, configuredDays, filteredSessions]);
 
   const visibleProfs = useMemo(
     () =>
@@ -149,11 +170,34 @@ export function WeeklyCalendarView({
         </span>
       </div>
 
+      {/* Hidden Days Notice (if displayDaysCount < 6 and sessions exist on hidden days) */}
+      {hiddenSessionsCount > 0 && (
+        <div className="no-print flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50/70 px-3.5 py-2 text-xs text-amber-900">
+          <span>
+            מוצגים כרגע{' '}
+            <strong>
+              {configuredDays.length} ימים ({formatVisibleDaysRange(configuredDays)})
+            </strong>
+            . קיימים <strong>{hiddenSessionsCount}</strong> שיבוצים בימים שאינם
+            מוצגים כעת.
+          </span>
+          {onShowAllDays && (
+            <button
+              type="button"
+              onClick={onShowAllDays}
+              className="rounded-lg bg-white px-2.5 py-1 text-xs font-bold text-amber-900 ring-1 ring-amber-300 transition hover:bg-amber-100"
+            >
+              הצג 6 ימים (א׳–ו׳)
+            </button>
+          )}
+        </div>
+      )}
+
       {/* MOBILE VIEW (< lg) */}
       <div className="space-y-3 lg:hidden">
         {filters.day === 'all' && (
           <div className="flex gap-1.5 overflow-x-auto pb-1">
-            {DAYS_ORDER.map((day) => {
+            {configuredDays.map((day) => {
               const count = filteredSessions.filter((s) => s.day === day).length;
               const isActive = activeMobileDay === day;
               return (
@@ -322,7 +366,7 @@ export function WeeklyCalendarView({
 
       {/* DESKTOP PROPORTIONAL SCHEDULE MATRIX (lg+) */}
       <div className="hidden overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-xs lg:block">
-        <div className="min-w-[960px]">
+        <div style={{ minWidth: `${Math.max(420, 72 + visibleDays.length * 150)}px` }}>
           {/* Header Row */}
           <div
             className="grid border-b border-slate-200 bg-slate-50/90"

@@ -26,7 +26,13 @@ import { TherapistsView } from './components/TherapistsView';
 import { WeeklyCalendarView } from './components/WeeklyCalendarView';
 import { createInitialScheduleState } from './data/presets';
 import { generateSchedule } from './engine/scheduler';
-import { createId, DAY_LABELS, formatRange } from './engine/timeUtils';
+import {
+  createId,
+  DAY_LABELS,
+  formatRange,
+  formatVisibleDaysRange,
+  getVisibleDaysOrder,
+} from './engine/timeUtils';
 import {
   computeQuotaReport,
   evaluateAllSessions,
@@ -153,6 +159,17 @@ export function App() {
     () => new Map(state.kids.map((k) => [k.id, k])),
     [state.kids],
   );
+
+  const visibleWeekDays = useMemo(
+    () => getVisibleDaysOrder(state.rules.displayDaysCount),
+    [state.rules.displayDaysCount],
+  );
+
+  useEffect(() => {
+    if (filters.day !== 'all' && !visibleWeekDays.includes(filters.day)) {
+      setFilters((prev) => ({ ...prev, day: 'all' }));
+    }
+  }, [filters.day, visibleWeekDays]);
 
   const filteredSessions = useMemo(() => {
     const q = filters.search.trim().toLowerCase();
@@ -491,7 +508,8 @@ export function App() {
           </nav>
 
           <div className="text-[11px] text-slate-400">
-            א׳–ה׳ 07:30–15:30 • ו׳ 07:30–12:00 • הפסקת צהריים 12:30–14:00
+            לו״ז מוצג: {formatVisibleDaysRange(visibleWeekDays)} (
+            {visibleWeekDays.length} ימים) • א׳–ה׳ 07:30–15:30 • ו׳ 07:30–12:00
           </div>
         </div>
       </header>
@@ -545,6 +563,7 @@ export function App() {
             onChange={setFilters}
             professionals={state.professionals}
             kids={state.kids}
+            displayDaysCount={state.rules.displayDaysCount}
             totalCount={state.sessions.length}
             filteredCount={filteredSessions.length}
           />
@@ -564,6 +583,16 @@ export function App() {
                 setEditorDraft({ mode: 'create', prefill })
               }
               onUnblockSlot={handleUnblockSlot}
+              onShowAllDays={() =>
+                commitState(
+                  {
+                    ...state,
+                    rules: { ...state.rules, displayDaysCount: 6 },
+                    lastModifiedIso: new Date().toISOString(),
+                  },
+                  'הלו״ז עודכן להצגת כל 6 הימים (א׳–ו׳)',
+                )
+              }
             />
           )}
 

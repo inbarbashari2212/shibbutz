@@ -11,6 +11,20 @@ export const DAY_LABELS: Record<DayKey, { short: string; full: string }> = {
   fri: { short: 'ו׳', full: 'יום שישי' },
 };
 
+export function getVisibleDaysOrder(displayDaysCount?: number): DayKey[] {
+  const count =
+    typeof displayDaysCount === 'number' && Number.isFinite(displayDaysCount)
+      ? Math.min(DAYS_ORDER.length, Math.max(1, Math.round(displayDaysCount)))
+      : DAYS_ORDER.length;
+  return DAYS_ORDER.slice(0, count);
+}
+
+export function formatVisibleDaysRange(days: DayKey[]): string {
+  if (days.length === 0) return '';
+  if (days.length === 1) return DAY_LABELS[days[0]].short;
+  return `${DAY_LABELS[days[0]].short}–${DAY_LABELS[days[days.length - 1]].short}`;
+}
+
 export function formatTime(totalMinutes: number): string {
   const h = Math.floor(totalMinutes / 60);
   const m = totalMinutes % 60;

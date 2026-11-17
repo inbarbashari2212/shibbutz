@@ -1,5 +1,6 @@
 import {
   AlertTriangle,
+  CalendarDays,
   Clock,
   Plus,
   RefreshCw,
@@ -20,6 +21,8 @@ import {
   DAY_LABELS,
   DAYS_ORDER,
   formatTime,
+  formatVisibleDaysRange,
+  getVisibleDaysOrder,
   parseTimeToMinutes,
 } from '../engine/timeUtils';
 import {
@@ -213,6 +216,9 @@ export function SettingsView({
     });
   };
 
+  const visibleWeekDays = getVisibleDaysOrder(state.rules.displayDaysCount);
+  const displayDaysCount = visibleWeekDays.length;
+
   return (
     <div className="space-y-6">
       {/* 1. Auto-Schedule & Quick Presets */}
@@ -279,12 +285,79 @@ export function SettingsView({
         </div>
       </section>
 
-      {/* 2. Session, Break & Yellow Consecutive 1:1 Rules */}
+      {/* 2. Weekly Display & Session/Break Rules */}
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs sm:p-5">
         <h2 className="flex items-center gap-2 text-base font-extrabold text-slate-900">
           <Clock className="h-5 w-5 text-teal-600" />
-          <span>כללי משבצות, הפסקות ורצף טיפולים (ניתן לעריכה)</span>
+          <span>כללי תצוגה, משבצות והפסקות (ניתן לעריכה)</span>
         </h2>
+
+        {/* Visible Days in Weekly Schedule */}
+        <div className="mt-4 rounded-2xl border border-teal-200/80 bg-teal-50/40 p-3.5 sm:p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex items-start gap-2.5">
+              <CalendarDays className="mt-0.5 h-5 w-5 shrink-0 text-teal-700" />
+              <div>
+                <h3 className="text-sm font-extrabold text-slate-900">
+                  כמות ימים מוצגים בלו״ז השבועי
+                </h3>
+                <p className="mt-0.5 text-xs text-slate-600">
+                  מוצגים כרגע{' '}
+                  <strong className="text-teal-800">{displayDaysCount}</strong>{' '}
+                  {displayDaysCount === 1 ? 'יום' : 'ימים'}:{' '}
+                  <span className="font-semibold text-slate-800">
+                    {displayDaysCount === 1
+                      ? DAY_LABELS[visibleWeekDays[0]].full
+                      : `${DAY_LABELS[visibleWeekDays[0]].full} עד ${DAY_LABELS[visibleWeekDays[visibleWeekDays.length - 1]].full} (${formatVisibleDaysRange(visibleWeekDays)})`}
+                  </span>
+                </p>
+              </div>
+            </div>
+
+            <div
+              className="flex flex-wrap gap-1.5"
+              role="group"
+              aria-label="כמות ימים מוצגים בלו״ז השבועי"
+            >
+              {[1, 2, 3, 4, 5, 6].map((count) => {
+                const daysPreview = DAYS_ORDER.slice(0, count);
+                const active = displayDaysCount === count;
+                return (
+                  <button
+                    key={count}
+                    type="button"
+                    onClick={() =>
+                      onUpdateState(
+                        {
+                          ...state,
+                          rules: { ...state.rules, displayDaysCount: count },
+                          lastModifiedIso: new Date().toISOString(),
+                        },
+                        `הלו״ז השבועי עודכן להצגת ${count} ${count === 1 ? 'יום' : 'ימים'} (${formatVisibleDaysRange(daysPreview)})`,
+                      )
+                    }
+                    className={`flex flex-col items-center rounded-xl border px-3 py-1.5 text-xs font-bold transition ${
+                      active
+                        ? 'border-teal-600 bg-teal-600 text-white shadow-xs'
+                        : 'border-slate-200 bg-white text-slate-700 hover:border-teal-300 hover:bg-teal-50/60'
+                    }`}
+                  >
+                    <span className="tabular-nums text-sm leading-tight">
+                      {count}
+                    </span>
+                    <span
+                      className={`text-[10px] font-medium ${
+                        active ? 'text-teal-100' : 'text-slate-400'
+                      }`}
+                    >
+                      {formatVisibleDaysRange(daysPreview)}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
 
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <div>
@@ -620,6 +693,7 @@ export function SettingsView({
                     {DAYS_ORDER.map((day) => {
                       const windows = prof.workSchedule[day] ?? [];
                       const isActive = windows.length > 0;
+                      const isDayShownInSchedule = visibleWeekDays.includes(day);
                       return (
                         <div
                           key={day}
@@ -629,7 +703,7 @@ export function SettingsView({
                               : 'border-slate-200 bg-slate-50/70 opacity-75'
                           }`}
                         >
-                          <div className="flex items-center justify-between">
+                          <div className="flex items-center justify-between gap-1">
                             <label className="flex cursor-pointer items-center gap-2 text-xs font-bold text-slate-800">
                               <input
                                 type="checkbox"
@@ -638,6 +712,11 @@ export function SettingsView({
                                 className="h-4 w-4 accent-teal-600"
                               />
                               <span>{DAY_LABELS[day].full}</span>
+                              {!isDayShownInSchedule && (
+                                <span className="rounded bg-slate-200/80 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">
+                                  מוסתר בלו״ז
+                                </span>
+                              )}
                             </label>
                             {isActive && (
                               <button
